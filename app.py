@@ -1,11 +1,18 @@
 import streamlit as st
 import datetime
 
-# --- KONFIGURATION & DATEN ---
-st.set_page_config(page_title="Stadion Scheduling Tool", layout="wide")
+# --- KONFIGURATION ---
+st.set_page_config(page_title="Stadion Scheduling Assistent", layout="wide")
+
+# CSS für kompaktere Darstellung der Code-Blöcke
+st.markdown("""
+    <style>
+    .stCodeBlock { margin-bottom: -15px; }
+    .stMarkdown { line-height: 1.2; }
+    </style>
+    """, unsafe_allow_stdio=True)
 
 ANPFIFF_ZEITEN = ["15:30", "17:30", "18:30", "18:45", "19:30", "20:00", "20:30", "20:45", "21:00"]
-LABEL_WIDTH = 90
 
 MD_MATRIX = {
     "stadion_offen": ["13:15", "15:15", "16:15", "16:30", "17:15", "17:45", "18:15", "18:30", "18:45"],
@@ -53,113 +60,116 @@ SKRIPTE_BASE = [
     (20, "CL-Audi Tiefgarage-S0 E1-alle gleich-XX.XX.20XX", "BL-Audi Tiefgarage-S0 E1-alle gleich-XX.XX.20XX")
 ]
 
-# --- LOGIN LOGIK ---
+# --- LOGIN ---
 def check_password():
-    def password_entered():
-        if st.session_state["password"] == "makeitso!":
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
-
     if "password_correct" not in st.session_state:
-        st.text_input("Passwort eingeben", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("Passwort eingeben", type="password", on_change=password_entered, key="password")
-        st.error("Falsches Passwort")
-        return False
-    else:
-        return True
+        st.session_state["password_correct"] = False
 
-# --- HAUPTPROGRAMM ---
+    if not st.session_state["password_correct"]:
+        pwd = st.text_input("Passwort eingeben", type="password")
+        if st.button("Anmelden") or pwd:
+            if pwd == "makeitso!":
+                st.session_state["password_correct"] = True
+                st.rerun()
+            elif pwd:
+                st.error("Falsches Passwort")
+        return False
+    return True
+
 if check_password():
     st.title("⚽ Stadion Scheduling Assistent")
 
-    # Sidebar für Einstellungen
     with st.sidebar:
         st.header("Konfiguration")
-        datum = st.date_input("Spieldatum", datetime.date.today()).strftime("%d.%m.%Y")
+        datum_dt = st.date_input("Spieldatum", datetime.date.today())
+        datum = datum_dt.strftime("%d.%m.%Y")
         wettbewerb = st.selectbox("Wettbewerb", ["Bundesliga", "Champions League"])
         anpfiff = st.selectbox("Anpfiffzeit", ANPFIFF_ZEITEN)
         bereich = st.selectbox("Bereich", ["Vorkontrollen", "Wegeleitung", "Touchpoints (Skripte)"])
-        run_btn = st.button("Scheduling")
+        st.info("💡 Tipp: Bei den Skripten kannst du den Namen durch Klicken auf das Kopieren-Symbol direkt übernehmen.")
 
-    if run_btn:
-        idx = ANPFIFF_ZEITEN.index(anpfiff)
-        is_bl = wettbewerb == "Bundesliga"
+    # --- BERECHNUNG ---
+    idx = ANPFIFF_ZEITEN.index(anpfiff)
+    is_bl = wettbewerb == "Bundesliga"
+    
+    if bereich == "Touchpoints (Skripte)":
+        ref_anpfiff = datetime.datetime.strptime(anpfiff, "%H:%M")
+        ref_nmd_start = datetime.datetime.strptime(MD_MATRIX["nmd_start_ref"][idx], "%H:%M")
+        ref_p18_row = datetime.datetime.strptime(MD_MATRIX["p18_ref_row"][idx], "%H:%M")
+        ref_opening = datetime.datetime.strptime(MD_MATRIX["stadion_offen"][idx], "%H:%M")
+        akkr_time = datetime.datetime.strptime(MD_MATRIX["akkr"][idx], "%H:%M")
+
+        prio18_anchor = ref_p18_row - datetime.timedelta(minutes=5)
         
-        output_buffer = []
-        output_buffer.append(f"ERGEBNIS FÜR: {wettbewerb} | DATUM: {datum} | ANPFIFF: {anpfiff}")
-        output_buffer.append("="*110 + "\n")
+        main_scripts = []
+        for prio, cl_n, bl_n in SKRIPTE_BASE:
+            raw_name = bl_n if is_bl else cl_n
+            name = raw_name.replace("XX.XX.20XX", datum)
+            if "EingangNord" in name or "Eingang Nord" in name:
+                dt = akkr_time
+            elif prio == 1:
+                dt = ref_nmd_start - datetime.timedelta(minutes=5)
+            elif 3 <= prio <= 18:
+                dt = prio18_anchor - datetime.timedelta(minutes=(18-prio)*5)
+            elif prio == 19:
+                dt = ref_anpfiff - datetime.timedelta(hours=4, minutes=5)
+            elif prio == 20:
+                dt = ref_anpfiff - datetime.timedelta(hours=3, minutes=5)
+            else: continue
+            main_scripts.append({'prio': prio, 'name': name, 'dt': dt})
 
-        if bereich == "Vorkontrollen":
-            for label, zeiten in MD_MATRIX["vorkontrollen"]:
-                output_buffer.append(f"{label.ljust(LABEL_WIDTH, '.')} | {zeiten[idx]}")
+        # Kollisions-Check (Nur Hauptskripte)
+        main_scripts.sort(key=lambda x: x['prio'])
+        used_times = set()
+        for script in main_scripts:
+            curr_dt = script['dt']
+            while curr_dt.strftime("%H:%M") in used_times:
+                curr_dt -= datetime.timedelta(minutes=5)
+            script['dt'] = curr_dt
+            used_times.add(curr_dt.strftime("%H:%M"))
+
+        # --- AUSGABE TOUCHPOINTS ---
+        st.subheader(f"Ergebnis: {wettbewerb} | {datum} | {anpfiff}")
         
-        elif bereich == "Wegeleitung":
-            for label, zeiten in MD_MATRIX["wegeleitung"]:
-                output_buffer.append(f"{label.ljust(LABEL_WIDTH, '.')} | {zeiten[idx]}")
-
-        elif bereich == "Touchpoints (Skripte)":
-            ref_anpfiff = datetime.datetime.strptime(anpfiff, "%H:%M")
-            ref_nmd_start = datetime.datetime.strptime(MD_MATRIX["nmd_start_ref"][idx], "%H:%M")
-            ref_p18_row = datetime.datetime.strptime(MD_MATRIX["p18_ref_row"][idx], "%H:%M")
-            ref_opening = datetime.datetime.strptime(MD_MATRIX["stadion_offen"][idx], "%H:%M")
-            akkr_time = datetime.datetime.strptime(MD_MATRIX["akkr"][idx], "%H:%M")
-
-            prio18_anchor = ref_p18_row - datetime.timedelta(minutes=5)
+        for script in main_scripts:
+            time_str = script['dt'].strftime("%H:%M")
+            prio = script['prio']
             
-            main_scripts = []
-            for prio, cl_n, bl_n in SKRIPTE_BASE:
-                raw_name = bl_n if is_bl else cl_n
-                name = raw_name.replace("XX.XX.20XX", datum)
-                if "EingangNord" in name or "Eingang Nord" in name:
-                    dt = akkr_time
-                elif prio == 1:
-                    dt = ref_nmd_start - datetime.timedelta(minutes=5)
-                elif 3 <= prio <= 18:
-                    dt = prio18_anchor - datetime.timedelta(minutes=(18-prio)*5)
-                elif prio == 19:
-                    dt = ref_anpfiff - datetime.timedelta(hours=4, minutes=5)
-                elif prio == 20:
-                    dt = ref_anpfiff - datetime.timedelta(hours=3, minutes=5)
-                else: continue
-                main_scripts.append({'prio': prio, 'name': name, 'dt': dt})
+            # Layout: Skriptname links (kopierbar), Startzeit rechts
+            col_name, col_time = st.columns([4, 1])
+            with col_name:
+                st.code(script['name'], language=None)
+            with col_time:
+                st.markdown(f"### **{time_str}**")
+            
+            # States (Nicht kopierbar, eingerückt)
+            def show_state(label, zeit):
+                c1, c2 = st.columns([4, 1])
+                c1.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp; └─ *{label}*")
+                c2.markdown(f"**{zeit}**")
 
-            # Kollisions-Check
-            main_scripts.sort(key=lambda x: x['prio'])
-            used_times = set()
-            for script in main_scripts:
-                curr_dt = script['dt']
-                while curr_dt.strftime("%H:%M") in used_times:
-                    curr_dt -= datetime.timedelta(minutes=5)
-                script['dt'] = curr_dt
-                used_times.add(curr_dt.strftime("%H:%M"))
+            if prio == 1:
+                show_state("MD Content - nur mit Akkreditierung - ab 3,5h...", (ref_anpfiff - datetime.timedelta(hours=3, minutes=30)).strftime("%H:%M"))
+                show_state("MD Content ab Stadionöffnung bis 70. Minute", ref_opening.strftime("%H:%M"))
+                show_state("MD Content Verkehrsführung ab 70. Minute", (ref_anpfiff + datetime.timedelta(hours=1, minutes=25)).strftime("%H:%M"))
+            elif prio == 2:
+                show_state("PreMatch mit Hospitality ab Stadionöffnung", ref_opening.strftime("%H:%M"))
+                show_state("PostMatch ab 2. Halbzeit", (ref_anpfiff + datetime.timedelta(minutes=45)).strftime("%H:%M"))
+            elif prio in [5, 6, 7, 8, 17]:
+                show_state("State: Welcome Only", ref_opening.strftime("%H:%M"))
+                show_state("State: PRE-Match", (ref_opening + datetime.timedelta(minutes=15)).strftime("%H:%M"))
+            elif prio in [9, 10, 11, 12, 13, 15, 16]:
+                show_state("State: Welcome Only", (ref_opening + datetime.timedelta(minutes=15)).strftime("%H:%M"))
+                show_state("State: PRE-Match", (ref_opening + datetime.timedelta(minutes=30)).strftime("%H:%M"))
+            
+            st.divider()
 
-            for script in main_scripts:
-                time_str = script['dt'].strftime("%H:%M")
-                prio = script['prio']
-                output_buffer.append(f"{script['name'].ljust(LABEL_WIDTH, '.')} | Start: {time_str}")
-                
-                # States hinzufügen
-                def add_state(label, zeit):
-                    display_text = f"    ... {label}"
-                    output_buffer.append(f"{display_text.ljust(LABEL_WIDTH, '.')} | {zeit}")
-
-                if prio == 1:
-                    add_state("MD Content - nur mit Akkreditierung - ab 3,5h...", (ref_anpfiff - datetime.timedelta(hours=3, minutes=30)).strftime("%H:%M"))
-                    add_state("MD Content ab Stadionöffnung bis 70. Minute", ref_opening.strftime("%H:%M"))
-                    add_state("MD Content Verkehrsführung ab 70. Minute", (ref_anpfiff + datetime.timedelta(hours=1, minutes=25)).strftime("%H:%M"))
-                elif prio == 2:
-                    add_state("PreMatch mit Hospitality ab Stadionöffnung", ref_opening.strftime("%H:%M"))
-                    add_state("PostMatch ab 2. Halbzeit", (ref_anpfiff + datetime.timedelta(minutes=45)).strftime("%H:%M"))
-                elif prio in [5, 6, 7, 8, 17]:
-                    add_state("State: Welcome Only", ref_opening.strftime("%H:%M"))
-                    add_state("State: PRE-Match", (ref_opening + datetime.timedelta(minutes=15)).strftime("%H:%M"))
-                elif prio in [9, 10, 11, 12, 13, 15, 16]:
-                    add_state("State: Welcome Only", (ref_opening + datetime.timedelta(minutes=15)).strftime("%H:%M"))
-                    add_state("State: PRE-Match", (ref_opening + datetime.timedelta(minutes=30)).strftime("%H:%M"))
-
-        # Anzeige in einem monospaced Code-Block für perfekte Ausrichtung
-        st.code("\n".join(output_buffer), language="text")
+    else:
+        # Vorkontrollen & Wegeleitung (Standard-Ausgabe)
+        st.subheader(f"Ergebnis: {bereich}")
+        data_key = "vorkontrollen" if bereich == "Vorkontrollen" else "wegeleitung"
+        
+        output = ""
+        for label, zeiten in MD_MATRIX[data_key]:
+            output += f"{label.ljust(90, '.')} | {zeiten[idx]}\n"
+        st.code(output, language=None)
