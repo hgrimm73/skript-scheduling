@@ -9,33 +9,61 @@ st.markdown("""
     <style>
     .stCheckbox { margin-bottom: -15px; padding-top: 10px; }
     .stCodeBlock { margin-top: -10px; }
-    .Erledigt { opacity: 0.4; filter: grayscale(100%); }
+    .Erledigt { 
+        opacity: 0.3; 
+        filter: grayscale(100%); 
+        text-decoration: line-through;
+    }
+    /* Fix für Spalten-Abstände */
+    [data-testid="column"] {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 ANPFIFF_ZEITEN = ["15:30", "17:30", "18:30", "18:45", "19:30", "20:00", "20:30", "20:45", "21:00"]
 
-# Hilfsfunktion für AM/PM Konvertierung
+# Robuste Hilfsfunktion für AM/PM Konvertierung
 def to_ampm(time_str):
+    if not time_str or "ca." in time_str.lower():
+        # Behandelt Spezialfälle wie "ca. 20:30"
+        prefix = "ca. " if "ca." in time_str.lower() else ""
+        raw = time_str.lower().replace("ca.", "").strip()
+        try:
+            t = datetime.datetime.strptime(raw[:5], "%H:%M")
+            return prefix + t.strftime("%I:%M %p").lstrip("0")
+        except:
+            return time_str
     try:
-        # Extrahiert nur HH:MM falls ca. oder Text dabei steht
-        clean_time = "".join(filter(lambda x: x in "0123456789:", time_str[:5]))
-        t = datetime.datetime.strptime(clean_time, "%H:%M")
+        t = datetime.datetime.strptime(time_str[:5], "%H:%M")
         return t.strftime("%I:%M %p").lstrip("0")
     except:
-        return time_str # Falls "ca. 20:30" etc.
+        return time_str
 
 MD_MATRIX = {
     "stadion_offen": ["13:15", "15:15", "16:15", "16:30", "17:15", "17:45", "18:15", "18:30", "18:45"],
     "akkr": ["07:00"] * 9,
     "nmd_start_ref": ["06:00"] * 9,
     "p18_ref_row": ["07:00", "09:00", "10:00", "10:15", "11:00", "11:30", "12:00", "12:15", "12:30"],
+    
     "vorkontrollen": [
-        ("Vorkontrollen - START", ["07:00", "09:00", "10:00", "10:15", "11:00", "11:30", "12:00", "12:15", "12:30"]),
-        ("Vorkontrollen - ENDE", ["09:00", "11:00", "11:45", "12:15", "13:00", "13:30", "13:45", "13:45", "13:45"]),
-        ("Museum - START", ["09:45", "11:45", "11:45", "13:45", "13:45", "13:45", "13:45", "13:45", "13:45"]),
-        ("PRE-Content - START", ["12:00", "14:00", "15:00", "15:15", "16:00", "16:30", "17:00", "17:15", "17:30"]),
-        ("POST-Content - ENDE", ["20:30", "22:30", "23:30", "23:45", "00:30", "01:00", "01:30", "01:45", "02:00"])
+        ("Vorkontrollen - Timeline: LED-Service für W&W Spieltagstest - START", ["07:00", "09:00", "10:00", "10:15", "11:00", "11:30", "12:00", "12:15", "12:30"]),
+        ("Vorkontrollen - Timeline: LED-Service für W&W Spieltagstest - ENDE", ["09:00", "11:00", "11:45", "12:15", "13:00", "13:30", "13:45", "13:45", "13:45"]),
+        ("Vorkontrollen - Timeline: Museums Content - START", ["09:45", "11:45", "11:45", "13:45", "13:45", "13:45", "13:45", "13:45", "13:45"]),
+        ("Vorkontrollen - Timeline: Museums Content - ENDE", ["12:00", "14:00", "15:00", "15:15", "16:00", "16:30", "17:00", "17:15", "17:30"]),
+        ("Vorkontrollen - Timeline: PRE-Content - START", ["12:00", "14:00", "15:00", "15:15", "16:00", "16:30", "17:00", "17:15", "17:30"]),
+        ("Vorkontrollen - Timeline: PRE-Content - ENDE", ["16:55", "18:55", "19:55", "19:15", "20:55", "21:25", "21:55", "21:15", "22:25"]),
+        ("Vorkontrollen - Timeline: POST-Content - START", ["16:55", "18:55", "19:55", "19:15", "20:55", "21:25", "21:55", "21:15", "22:25"]),
+        ("Vorkontrollen - Timeline: POST-Content - ENDE", ["20:30", "22:30", "23:30", "23:45", "00:30", "01:00", "01:30", "01:45", "02:00"])
+    ],
+    
+    "wegeleitung": [
+        ("Wegeleitung - NMD Content ausspielen - START", ["06:00"] * 9),
+        ("Wegeleitung - NMD Content ausspielen - ENDE", ["12:00", "14:00", "15:00", "15:15", "16:00", "16:30", "17:00", "17:15", "17:30"]),
+        ("Wegeleitung - MD Content ausspielen - START", ["12:00", "14:00", "15:00", "15:15", "16:00", "16:30", "17:00", "17:15", "17:30"]),
+        ("Wegeleitung - MD Content ausspielen - ENDE", ["20:30", "22:30", "23:30", "23:45", "00:30", "01:00", "01:30", "01:45", "02:00"])
     ]
 }
 
@@ -62,7 +90,7 @@ SKRIPTE_BASE = [
     (20, "CL-Audi Tiefgarage-S0 E1-alle gleich-XX.XX.20XX", "BL-Audi Tiefgarage-S0 E1-alle gleich-XX.XX.20XX")
 ]
 
-# --- LOGIN ---
+# --- PASSWORT PRÜFUNG ---
 if "password_correct" not in st.session_state:
     st.session_state["password_correct"] = False
 
@@ -82,7 +110,7 @@ with st.sidebar:
     datum = datum_dt.strftime("%d.%m.%Y")
     wettbewerb = st.selectbox("Wettbewerb", ["Bundesliga", "Champions League"])
     anpfiff = st.selectbox("Anpfiff", ANPFIFF_ZEITEN)
-    bereich = st.selectbox("Bereich", ["Touchpoints (Skripte)", "Vorkontrollen & Wegeleitung"])
+    bereich = st.selectbox("Bereich", ["Touchpoints (Skripte)", "Vorkontrollen", "Wegeleitung"])
     st.divider()
     run = st.button("Scheduling", type="primary", use_container_width=True)
 
@@ -91,22 +119,23 @@ if run or "last_run" in st.session_state:
     idx = ANPFIFF_ZEITEN.index(anpfiff)
     is_bl = wettbewerb == "Bundesliga"
     
-    if "Touchpoints" in bereich:
-        ref_anpfiff = datetime.datetime.strptime(anpfiff, "%H:%M")
+    if bereich == "Touchpoints (Skripte)":
+        # Referenzzeiten
+        ref_anp = datetime.datetime.strptime(anpfiff, "%H:%M")
         ref_nmd = datetime.datetime.strptime(MD_MATRIX["nmd_start_ref"][idx], "%H:%M")
         ref_p18 = datetime.datetime.strptime(MD_MATRIX["p18_ref_row"][idx], "%H:%M")
         ref_open = datetime.datetime.strptime(MD_MATRIX["stadion_offen"][idx], "%H:%M")
-        akkr_time = datetime.datetime.strptime(MD_MATRIX["akkr"][idx], "%H:%M")
+        akkr_t = datetime.datetime.strptime(MD_MATRIX["akkr"][idx], "%H:%M")
         prio18_anchor = ref_p18 - datetime.timedelta(minutes=5)
         
         main_scripts = []
         for prio, cl_n, bl_n in SKRIPTE_BASE:
             name = (bl_n if is_bl else cl_n).replace("XX.XX.20XX", datum)
-            if "EingangNord" in name: dt = akkr_time
+            if "EingangNord" in name: dt = akkr_t
             elif prio == 1: dt = ref_nmd - datetime.timedelta(minutes=5)
             elif 3 <= prio <= 18: dt = prio18_anchor - datetime.timedelta(minutes=(18-prio)*5)
-            elif prio == 19: dt = ref_anpfiff - datetime.timedelta(hours=4, minutes=5)
-            elif prio == 20: dt = ref_anpfiff - datetime.timedelta(hours=3, minutes=5)
+            elif prio == 19: dt = ref_anp - datetime.timedelta(hours=4, minutes=5)
+            elif prio == 20: dt = ref_anp - datetime.timedelta(hours=3, minutes=5)
             else: continue
             main_scripts.append({'prio': prio, 'name': name, 'dt': dt})
 
@@ -117,48 +146,51 @@ if run or "last_run" in st.session_state:
             while s['dt'].strftime("%H:%M") in used: s['dt'] -= datetime.timedelta(minutes=5)
             used.add(s['dt'].strftime("%H:%M"))
 
-        # --- AUSGABE ---
+        # --- AUSGABE TOUCHPOINTS ---
+        st.subheader(f"Touchpoints Scheduling ({anpfiff} Uhr)")
         for s in main_scripts:
             p = s['prio']
-            # Jedes Skript bekommt einen eindeutigen Key für die Checkbox
-            checked = st.checkbox(f"Erledigt", key=f"check_{p}")
+            is_done = st.checkbox(f"Erledigt", key=f"check_{p}")
+            style_class = "Erledigt" if is_done else ""
             
-            # CSS Klasse falls erledigt
-            div_class = "Erledigt" if checked else ""
-            
-            st.markdown(f'<div class="{div_class}">', unsafe_allow_html=True)
-            c1, c2 = st.columns([5, 1])
+            st.markdown(f'<div class="{style_class}">', unsafe_allow_html=True)
+            c1, c2 = st.columns([5, 1.2])
             c1.code(s['name'], language=None)
             c2.markdown(f"#### **{to_ampm(s['dt'].strftime('%H:%M'))}**")
             
-            # States Logik
-            def st_row(lbl, z):
-                sc1, sc2 = st.columns([5, 1])
+            def add_st(lbl, z):
+                sc1, sc2 = st.columns([5, 1.2])
                 sc1.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp; └─ *{lbl}*")
                 sc2.markdown(f"**{to_ampm(z)}**")
 
             if p == 1:
-                st_row("State: MD Content - ab 3,5h vor Anpfiff", (ref_anpfiff - datetime.timedelta(hours=3, minutes=30)).strftime("%H:%M"))
-                st_row("State: MD Content ab Stadionöffnung", ref_open.strftime("%H:%M"))
-                st_row("State: Verkehrsführung ab 70. Minute", (ref_anpfiff + datetime.timedelta(hours=1, minutes=25)).strftime("%H:%M"))
+                add_st("MD Content - ab 3,5h vor Anpfiff", (ref_anp - datetime.timedelta(hours=3, minutes=30)).strftime("%H:%M"))
+                add_st("MD Content ab Stadionöffnung", ref_open.strftime("%H:%M"))
+                add_st("Verkehrsführung ab 70. Minute", (ref_anp + datetime.timedelta(hours=1, minutes=25)).strftime("%H:%M"))
             elif p == 2:
-                st_row("State: PreMatch mit Hospitality", ref_open.strftime("%H:%M"))
-                st_row("State: PostMatch ab 2. Halbzeit", (ref_anpfiff + datetime.timedelta(minutes=45)).strftime("%H:%M"))
+                add_st("PreMatch mit Hospitality", ref_open.strftime("%H:%M"))
+                add_st("PostMatch ab 2. Halbzeit", (ref_anp + datetime.timedelta(minutes=45)).strftime("%H:%M"))
             elif p in [5, 6, 7, 8, 17]:
-                st_row("State: Welcome Only", ref_open.strftime("%H:%M"))
-                st_row("State: PRE-Match", (ref_open + datetime.timedelta(minutes=15)).strftime("%H:%M"))
+                add_st("State: Welcome Only", ref_open.strftime("%H:%M"))
+                add_st("State: PRE-Match", (ref_open + datetime.timedelta(minutes=15)).strftime("%H:%M"))
             elif p in [9, 10, 11, 12, 13, 15, 16]:
-                st_row("State: Welcome Only", (ref_open + datetime.timedelta(minutes=15)).strftime("%H:%M"))
-                st_row("State: PRE-Match", (ref_open + datetime.timedelta(minutes=30)).strftime("%H:%M"))
-            
+                add_st("State: Welcome Only", (ref_open + datetime.timedelta(minutes=15)).strftime("%H:%M"))
+                add_st("State: PRE-Match", (ref_open + datetime.timedelta(minutes=30)).strftime("%H:%M"))
             st.markdown('</div>', unsafe_allow_html=True)
             st.divider()
 
-    else:
-        # Vorkontrollen & Wegeleitung
-        for k in ["vorkontrollen", "wegeleitung"]:
-            st.subheader(k.capitalize())
-            for label, zeiten in MD_MATRIX[k]:
-                c1, c2 = st.columns([5, 1])
-                c1.markdown(label)
-                c2.markdown(f"**{to_ampm(zeiten[idx])}**")
+    elif bereich == "Vorkontrollen":
+        st.subheader("Vorkontrollen Übersicht")
+        for label, zeiten in MD_MATRIX["vorkontrollen"]:
+            c1, c2 = st.columns([5, 1.2])
+            c1.markdown(label)
+            c2.markdown(f"**{to_ampm(zeiten[idx])}**")
+        st.divider()
+
+    elif bereich == "Wegeleitung":
+        st.subheader("Wegeleitung Übersicht")
+        for label, zeiten in MD_MATRIX["wegeleitung"]:
+            c1, c2 = st.columns([5, 1.2])
+            c1.markdown(label)
+            c2.markdown(f"**{to_ampm(zeiten[idx])}**")
+        st.divider()
