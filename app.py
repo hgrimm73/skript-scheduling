@@ -89,16 +89,38 @@ SKRIPTE_BASE = [
     (20, "CL-Audi Tiefgarage-S0 E1-alle gleich-XX.XX.20XX", "BL-Audi Tiefgarage-S0 E1-alle gleich-XX.XX.20XX")
 ]
 
-# --- LOGIN LOGIK ---
-if "password_correct" not in st.session_state:
-    st.session_state["password_correct"] = False
+# --- LOGIN LOGIK (via Secrets) ---
+def check_password():
+    """Gibt True zurück, wenn der Benutzer das richtige Passwort eingegeben hat."""
+    if st.session_state.get("password_correct"):
+        return True
 
-if not st.session_state["password_correct"]:
-    pwd = st.text_input("Passwort eingeben", type="password")
-    if pwd == "makeitso!":
+    # Login-Maske anzeigen
+    st.markdown("<h1 style='text-align:center;'>🏟️ Interner Bereich</h1>", unsafe_allow_html=True)
+    pwd = st.text_input("Passwort eingeben:", type="password")
+
+    # Passwort aus Secrets laden
+    try:
+        correct_password = st.secrets["password"]
+    except KeyError:
+        st.error("Fehler: Das Passwort ist nicht in den Streamlit Secrets hinterlegt.")
+        st.stop()
+
+    if pwd == correct_password:
         st.session_state["password_correct"] = True
         st.rerun()
-    else: st.stop()
+    elif pwd != "":
+        st.error("Passwort falsch.")
+    
+    return False
+
+# Programm stoppen, wenn Login nicht erfolgreich
+if not check_password():
+    st.stop()
+
+# --- HAUPTAPP (wird erst nach Login ausgeführt) ---
+st.title("⚽ Stadion Scheduling Assistent")
+# ... hier geht dein restlicher Code weiter ...
 
 # --- HAUPTAPP ---
 st.title("⚽ Stadion Scheduling Assistent")
