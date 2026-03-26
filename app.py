@@ -91,34 +91,33 @@ SKRIPTE_BASE = [
 
 # --- LOGIN LOGIK (via Secrets) ---
 def check_password():
+    """Gibt True zurück, wenn der Benutzer das richtige Passwort eingegeben hat."""
     if st.session_state.get("password_correct"):
         return True
 
-    # Hier habe ich die große Überschrift entfernt, 
-    # damit sie nach dem Login nicht doppelt erscheint.
-    st.info("Bitte loggen Sie sich ein, um den Assistenten zu nutzen.")
-    pwd = st.text_input("Passwort", type="password")
+    # Login-Maske anzeigen
+    st.markdown("<h1 style='text-align:center;'>🏟️ Interner Bereich</h1>", unsafe_allow_html=True)
+    pwd = st.text_input("Passwort eingeben:", type="password")
 
+    # Passwort aus Secrets laden
     try:
         correct_password = st.secrets["password"]
     except KeyError:
-        st.error("Passwort-Secret fehlt!")
+        st.error("Fehler: Das Passwort ist nicht in den Streamlit Secrets hinterlegt.")
         st.stop()
 
     if pwd == correct_password:
         st.session_state["password_correct"] = True
         st.rerun()
+    elif pwd != "":
+        st.error("Passwort falsch.")
+    
     return False
 
+# Programm stoppen, wenn Login nicht erfolgreich
 if not check_password():
     st.stop()
 
-# --- HAUPTAPP ---
-# Erst hier erscheint die endgültige Überschrift:
-st.title("⚽ Stadion Scheduling Assistent")
-# --- HAUPTAPP (wird erst nach Login ausgeführt) ---
-st.title("⚽ Stadion Scheduling Assistent")
-# ... hier geht dein restlicher Code weiter ...
 
 # --- HAUPTAPP ---
 st.title("⚽ Stadion Scheduling Assistent")
