@@ -53,8 +53,8 @@ MD_MATRIX = {
         ("Vorkontrollen - Timeline: Museums Content - START", ["09:45", "11:45", "11:45", "13:45", "13:45", "13:45", "13:45", "13:45", "13:45"]),
         ("Vorkontrollen - Timeline: Museums Content - ENDE", ["12:00", "14:00", "15:00", "15:15", "16:00", "16:30", "17:00", "17:15", "17:30"]),
         ("Vorkontrollen - Timeline: PRE-Content - START", ["12:00", "14:00", "15:00", "15:15", "16:00", "16:30", "17:00", "17:15", "17:30"]),
-        ("Vorkontrollen - Timeline: PRE-Content - ENDE", ["16:55", "18:55", "19:55", "19:15", "20:55", "21:25", "21:55", "21:15", "22:25"]),
-        ("Vorkontrollen - Timeline: POST-Content - START", ["16:55", "18:55", "19:55", "19:15", "20:55", "21:25", "21:55", "21:15", "22:25"]),
+        ("Vorkontrollen - Timeline: PRE-Content - ENDE", ["16:55", "18:55", "19:55", "20:10", "20:55", "21:25", "21:55", "22:10", "22:25"]),
+        ("Vorkontrollen - Timeline: POST-Content - START", ["16:55", "18:55", "19:55", "20:10", "20:55", "21:25", "21:55", "22:10", "22:25"]),
         ("Vorkontrollen - Timeline: POST-Content - ENDE", ["20:30", "22:30", "23:30", "23:45", "00:30", "01:00", "01:30", "01:45", "02:00"])
     ],
     
